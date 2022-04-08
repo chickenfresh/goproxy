@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"image"
 	"io"
 	"io/ioutil"
 	"net"
@@ -23,7 +22,6 @@ import (
 	"time"
 
 	"github.com/chickenfresh/goproxy"
-	goproxy_image "github.com/chickenfresh/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -151,7 +149,7 @@ func TestReplaceResponse(t *testing.T) {
 	}
 }
 
-func TestReplaceReponseForUrl(t *testing.T) {
+func TestReplaceResponseForUrl(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnResponse(goproxy.UrlIs("/koko")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.StatusCode = http.StatusOK
@@ -192,62 +190,6 @@ func TestOneShotFileServer(t *testing.T) {
 	}
 }
 
-func TestContentType(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse(goproxy.ContentTypeIs("image/png")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		resp.Header.Set("X-Shmoopi", "1")
-		return resp
-	})
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	for _, file := range []string{"test_data/panda.png", "test_data/football.png"} {
-		if resp, err := client.Get(localFile(file)); err != nil || resp.Header.Get("X-Shmoopi") != "1" {
-			if err == nil {
-				t.Error("pngs should have X-Shmoopi header = 1, actually", resp.Header.Get("X-Shmoopi"))
-			} else {
-				t.Error("error reading png", err)
-			}
-		}
-	}
-
-	file := "baby.jpg"
-	if resp, err := client.Get(localFile(file)); err != nil || resp.Header.Get("X-Shmoopi") != "" {
-		if err == nil {
-			t.Error("Non png images should NOT have X-Shmoopi header at all", resp.Header.Get("X-Shmoopi"))
-		} else {
-			t.Error("error reading png", err)
-		}
-	}
-}
-
-func getImage(file string, t *testing.T) image.Image {
-	newimage, err := ioutil.ReadFile(file)
-	if err != nil {
-		t.Fatal("Cannot read file", file, err)
-	}
-	img, _, err := image.Decode(bytes.NewReader(newimage))
-	if err != nil {
-		t.Fatal("Cannot decode image", file, err)
-	}
-	return img
-}
-
-func readAll(r io.Reader, t *testing.T) []byte {
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		t.Fatal("Cannot read", err)
-	}
-	return b
-}
-func readFile(file string, t *testing.T) []byte {
-	b, err := ioutil.ReadFile(file)
-	if err != nil {
-		t.Fatal("Cannot read", err)
-	}
-	return b
-}
 func fatalOnErr(err error, msg string, t *testing.T) {
 	if err != nil {
 		t.Fatal(msg, err)
@@ -257,84 +199,6 @@ func panicOnErr(err error, msg string) {
 	if err != nil {
 		println(err.Error() + ":-" + msg)
 		os.Exit(-1)
-	}
-}
-
-func compareImage(eImg, aImg image.Image, t *testing.T) {
-	if eImg.Bounds().Dx() != aImg.Bounds().Dx() || eImg.Bounds().Dy() != aImg.Bounds().Dy() {
-		t.Error("image sizes different")
-		return
-	}
-	for i := 0; i < eImg.Bounds().Dx(); i++ {
-		for j := 0; j < eImg.Bounds().Dy(); j++ {
-			er, eg, eb, ea := eImg.At(i, j).RGBA()
-			ar, ag, ab, aa := aImg.At(i, j).RGBA()
-			if er != ar || eg != ag || eb != ab || ea != aa {
-				t.Error("images different at", i, j, "vals\n", er, eg, eb, ea, "\n", ar, ag, ab, aa, aa)
-				return
-			}
-		}
-	}
-}
-
-func TestConstantImageHandler(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-	//panda := getImage("panda.png", t)
-	football := getImage("test_data/football.png", t)
-	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	resp, err := client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
-}
-
-func TestImageHandler(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-	football := getImage("test_data/football.png", t)
-
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	resp, err := client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
-
-	// and again
-	resp, err = client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err = image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
 	}
 }
 
@@ -358,30 +222,6 @@ func TestChangeResp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-func TestReplaceImage(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-
-	panda := getImage("test_data/panda.png", t)
-	football := getImage("test_data/football.png", t)
-
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return panda
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	imgByPandaReq, _, err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/panda.png"), client, t)))
-	fatalOnErr(err, "decode panda", t)
-	compareImage(football, imgByPandaReq, t)
-
-	imgByFootballReq, _, err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/football.png"), client, t)))
-	fatalOnErr(err, "decode football", t)
-	compareImage(panda, imgByFootballReq, t)
 }
 
 func getCert(c *tls.Conn, t *testing.T) []byte {
@@ -950,14 +790,10 @@ func TestSimpleHttpRequest(t *testing.T) {
 	}
 	client := http.Client{Transport: tr}
 
-	resp, err := client.Get("http://google.de")
-	if err != nil || resp.StatusCode != 200 {
-		t.Error("Error while requesting google with http", err)
-	}
-	resp, err = client.Get("http://google20012312031.de")
+	resp, err := client.Get("http://google20012312031.de")
 	fmt.Println(resp)
-	if resp == nil {
-		t.Error("Error while requesting random string with http", resp)
+	if resp == nil || err != nil {
+		t.Error("Error while requesting random string with http", resp, err)
 	}
 	proxy.OnResponse(goproxy.UrlMatches(regexp.MustCompile(".*"))).DoFunc(returnNil)
 
