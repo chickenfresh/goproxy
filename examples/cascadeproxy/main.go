@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chickenfresh/elazarl/ext/auth"
+	"github.com/chickenfresh/ext/auth"
 
 	"github.com/chickenfresh/goproxy"
 )

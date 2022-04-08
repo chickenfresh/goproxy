@@ -31,6 +31,7 @@ type ProxyHttpServer struct {
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	CertStore   CertStorage
 	KeepHeader  bool
+	IP          string
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -116,7 +117,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 
 		var err error
-		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
+		ctx.Logf("Got request %v %v %v %v on %s", r.URL.Path, r.Host, r.Method, r.URL.String(), proxy.IP)
 		if !r.URL.IsAbs() {
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
@@ -139,7 +140,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 			}
 			if resp != nil {
-				ctx.Logf("Received response %v", resp.Status)
+				ctx.Logf("Received response %v on %s", resp.Status, proxy.IP)
 			}
 		}
 
@@ -155,17 +156,17 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if resp == nil {
 			var errorString string
 			if ctx.Error != nil {
-				errorString = "error read response " + r.URL.Host + " : " + ctx.Error.Error()
+				errorString = "error read response " + r.URL.Host + "on " + proxy.IP + " : " + ctx.Error.Error()
 				ctx.Logf(errorString)
 				http.Error(w, ctx.Error.Error(), 500)
 			} else {
-				errorString = "error read response " + r.URL.Host
+				errorString = "error read response " + r.URL.Host + "on " + proxy.IP
 				ctx.Logf(errorString)
 				http.Error(w, errorString, 500)
 			}
 			return
 		}
-		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
+		ctx.Logf("Copying response to client %v [%d] on %s", resp.Status, resp.StatusCode, proxy.IP)
 		// http.ResponseWriter will take care of filling the correct response length
 		// Setting it now, might impose wrong value, contradicting the actual new
 		// body the user returned.
@@ -181,7 +182,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
-		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+		if err != nil {
+			ctx.Logf("Copied %v bytes to client %s on %s error=%v", nr, ctx.Req.URL.String(), proxy.IP, err)
+		} else {
+			ctx.Logf("Copied %v bytes to client %s on %s", nr, ctx.Req.URL.String(), proxy.IP)
+		}
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type ConnectActionLiteral int
@@ -93,8 +94,8 @@ type halfClosable interface {
 var _ halfClosable = (*net.TCPConn)(nil)
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
-
 	hij, ok := w.(http.Hijacker)
 	if !ok {
 		panic("httpserver does not support hijacking")
@@ -119,6 +120,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	}
 	switch todo.Action {
 	case ConnectAccept:
+	default:
+		defer func() {
+			ctx.Logf("%s processed request %v on %s", ctx.Req.URL.String(), time.Since(start), proxy.IP)
+		}()
+	}
+	switch todo.Action {
+	case ConnectAccept:
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
@@ -132,19 +140,27 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
+		wg := sync.WaitGroup{}
+		wg.Add(2)
 		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP)
-			go copyAndClose(ctx, proxyClientTCP, targetTCP)
+			go func() {
+				defer func() {
+					ctx.Logf("%s processed request %v on %s", ctx.Req.URL.String(), time.Since(start), proxy.IP)
+				}()
+				go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
+				go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
+				wg.Wait()
+			}()
 		} else {
 			go func() {
-				var wg sync.WaitGroup
-				wg.Add(2)
+				defer func() {
+					ctx.Logf("%s processed request %v on %s", ctx.Req.URL.String(), time.Since(start), proxy.IP)
+				}()
 				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
 				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
-
 			}()
 		}
 
@@ -318,19 +334,24 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 }
 
 func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	if _, err := io.Copy(dst, src); err != nil {
+	if bytes, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
+	} else {
+		ctx.Logf("copied %d bytes for %s", bytes, ctx.Req.URL.String())
 	}
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src halfClosable) {
-	if _, err := io.Copy(dst, src); err != nil {
+func copyAndClose(ctx *ProxyCtx, dst, src halfClosable, wg *sync.WaitGroup) {
+	if bytes, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
+	} else {
+		ctx.Logf("copied %d bytes for %s", bytes, ctx.Req.URL.String())
 	}
 
 	dst.CloseWrite()
 	src.CloseRead()
+	wg.Done()
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {

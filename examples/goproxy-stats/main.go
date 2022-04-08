@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/chickenfresh/goproxy/ext/html"
-	"github.com/elazarl/goproxy"
+	"github.com/chickenfresh/goproxy"
 	"io"
 	"log"
-	. "net/http"
+	"net/http"
 	"time"
 )
 
@@ -33,6 +32,8 @@ func (c CountReadCloser) Close() error {
 
 func main() {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Verbose = true
+	proxy.IP = "192.168.100.25"
 	timer := make(chan bool)
 	ch := make(chan Count, 10)
 	go func() {
@@ -57,10 +58,11 @@ func main() {
 	}()
 
 	// IsWebRelatedText filters on html/javascript/css resources
-	proxy.OnResponse(goproxy_html.IsWebRelatedText).DoFunc(func(resp *Response, ctx *goproxy.ProxyCtx) *Response {
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		fmt.Println(ctx.Req.URL.String(), resp.ContentLength, resp.StatusCode, resp.Header)
 		resp.Body = &CountReadCloser{ctx.Req.URL.String(), resp.Body, ch, 0}
 		return resp
 	})
-	fmt.Printf("listening on :8080\n")
-	log.Fatal(ListenAndServe(":8080", proxy))
+	fmt.Printf("listening on 0.0.0.0:8080\n")
+	log.Fatal(http.ListenAndServe("0.0.0.0:8080", proxy))
 }
