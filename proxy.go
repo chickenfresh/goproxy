@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -115,6 +116,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusEarlyHints)
 		w.Write([]byte("fuck you"))
 		r.Body.Close()
+		fmt.Printf("[INFO] requested banned ip %s\n", r.RemoteAddr)
 		return
 	}
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
