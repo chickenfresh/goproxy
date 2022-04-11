@@ -118,7 +118,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			w.WriteHeader(http.StatusEarlyHints)
 			w.Write([]byte("fuck you"))
 			r.Body.Close()
-			fmt.Printf("[INFO] requested banned ip %s\n", r.RemoteAddr)
+			fmt.Printf("[INFO] requested banned ip %s for %s\n", r.RemoteAddr, r.URL.String())
 			return
 		}
 	} else if proxy.WhiteListedRemoteHosts != nil {
@@ -126,7 +126,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			w.WriteHeader(http.StatusEarlyHints)
 			w.Write([]byte("fuck you"))
 			r.Body.Close()
-			fmt.Printf("[INFO] requested ip is not in whitelist %s\n", r.RemoteAddr)
+			fmt.Printf("[INFO] requested ip is not in whitelist %s for %s\n", r.RemoteAddr, r.URL.String())
 			return
 		}
 	}
