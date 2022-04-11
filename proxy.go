@@ -29,11 +29,12 @@ type ProxyHttpServer struct {
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial          func(network string, addr string) (net.Conn, error)
-	CertStore            CertStorage
-	KeepHeader           bool
-	IP                   string
-	ForbiddenRemoteHosts map[string]struct{}
+	ConnectDial            func(network string, addr string) (net.Conn, error)
+	CertStore              CertStorage
+	KeepHeader             bool
+	IP                     string
+	ForbiddenRemoteHosts   map[string]struct{}
+	WhiteListedRemoteHosts map[string]struct{}
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -112,12 +113,22 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if _, ok := proxy.ForbiddenRemoteHosts[r.RemoteAddr]; ok {
-		w.WriteHeader(http.StatusEarlyHints)
-		w.Write([]byte("fuck you"))
-		r.Body.Close()
-		fmt.Printf("[INFO] requested banned ip %s\n", r.RemoteAddr)
-		return
+	if proxy.ForbiddenRemoteHosts != nil {
+		if _, ok := proxy.ForbiddenRemoteHosts[r.RemoteAddr]; ok {
+			w.WriteHeader(http.StatusEarlyHints)
+			w.Write([]byte("fuck you"))
+			r.Body.Close()
+			fmt.Printf("[INFO] requested banned ip %s\n", r.RemoteAddr)
+			return
+		}
+	} else if proxy.WhiteListedRemoteHosts != nil {
+		if _, ok := proxy.WhiteListedRemoteHosts[r.RemoteAddr]; !ok {
+			w.WriteHeader(http.StatusEarlyHints)
+			w.Write([]byte("fuck you"))
+			r.Body.Close()
+			fmt.Printf("[INFO] requested ip is not in whitelist %s\n", r.RemoteAddr)
+			return
+		}
 	}
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == "CONNECT" {
