@@ -124,7 +124,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 
 		var err error
-		ctx.Logf("Got request %v %v %v %v on %s", r.URL.Path, r.Host, r.Method, r.URL.String(), proxy.IP)
+		ctx.Logf("Got request %v %v %v %v on %s from %s", r.URL.Path, r.Host, r.Method, r.URL.String(), proxy.IP, r.RemoteAddr)
 		if !r.URL.IsAbs() {
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
@@ -147,7 +147,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 			}
 			if resp != nil {
-				ctx.Logf("Received response %v on %s", resp.Status, proxy.IP)
+				ctx.Logf("Received response %v on %s from %s", resp.Status, proxy.IP, r.RemoteAddr)
 			}
 		}
 
@@ -173,7 +173,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 			return
 		}
-		ctx.Logf("Copying response to client %v [%d] on %s", resp.Status, resp.StatusCode, proxy.IP)
+		ctx.Logf("Copying response to client %v [%d] on %s from %s", resp.Status, resp.StatusCode, proxy.IP, r.RemoteAddr)
 		// http.ResponseWriter will take care of filling the correct response length
 		// Setting it now, might impose wrong value, contradicting the actual new
 		// body the user returned.
@@ -190,9 +190,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			ctx.Warnf("Can't close response body %v", err)
 		}
 		if err != nil {
-			ctx.Logf("Copied %v bytes to client %s on %s error=%v", nr, ctx.Req.URL.String(), proxy.IP, err)
+			ctx.Logf("Copied %v bytes to client %s on %s from %s error=%v", nr, ctx.Req.URL.String(), proxy.IP, r.RemoteAddr, err)
 		} else {
-			ctx.Logf("Copied %v bytes to client %s on %s", nr, ctx.Req.URL.String(), proxy.IP)
+			ctx.Logf("Copied %v bytes to client %s on %s from %s", nr, ctx.Req.URL.String(), proxy.IP, r.RemoteAddr)
 		}
 	}
 }

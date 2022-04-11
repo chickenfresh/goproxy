@@ -106,7 +106,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		panic("Cannot hijack connection " + e.Error())
 	}
 
-	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
+	//ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo, host := OkConnect, r.URL.Host
 	for i, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
@@ -122,7 +122,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	case ConnectAccept:
 	default:
 		defer func() {
-			ctx.Logf("%s processed request %v on %s", ctx.Req.URL.String(), time.Since(start), proxy.IP)
+			ctx.Logf("%s processed request %v on %s from %s", ctx.Req.URL.String(), time.Since(start), proxy.IP, r.RemoteAddr)
 		}()
 	}
 	switch todo.Action {
@@ -135,7 +135,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			httpError(proxyClient, ctx, err)
 			return
 		}
-		ctx.Logf("Accepting CONNECT to %s", host)
+		ctx.Logf("Accepting CONNECT to %s from %s", host, r.RemoteAddr)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
@@ -145,7 +145,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if targetOK && clientOK {
 			go func() {
 				defer func() {
-					ctx.Logf("%s processed request %v on %s", ctx.Req.URL.String(), time.Since(start), proxy.IP)
+					ctx.Logf("%s processed request %v on %s from %s", ctx.Req.URL.String(), time.Since(start), proxy.IP, r.RemoteAddr)
 				}()
 				go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
 				go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
@@ -154,7 +154,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		} else {
 			go func() {
 				defer func() {
-					ctx.Logf("%s processed request %v on %s", ctx.Req.URL.String(), time.Since(start), proxy.IP)
+					ctx.Logf("%s processed request %v on %s from %s", ctx.Req.URL.String(), time.Since(start), proxy.IP, r.RemoteAddr)
 				}()
 				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
 				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
