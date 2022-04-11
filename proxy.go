@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync/atomic"
 )
 
@@ -113,20 +114,21 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ip := strings.Split(r.RemoteAddr, ":")[0]
 	if proxy.ForbiddenRemoteHosts != nil {
-		if _, ok := proxy.ForbiddenRemoteHosts[r.RemoteAddr]; ok {
+		if _, ok := proxy.ForbiddenRemoteHosts[ip]; ok {
 			w.WriteHeader(http.StatusEarlyHints)
 			w.Write([]byte("fuck you"))
 			r.Body.Close()
-			fmt.Printf("[INFO] requested banned ip %s for %s\n", r.RemoteAddr, r.URL.String())
+			fmt.Printf("[INFO] requested banned ip %s for %s\n", ip, r.URL.String())
 			return
 		}
 	} else if proxy.WhiteListedRemoteHosts != nil {
-		if _, ok := proxy.WhiteListedRemoteHosts[r.RemoteAddr]; !ok {
+		if _, ok := proxy.WhiteListedRemoteHosts[ip]; !ok {
 			w.WriteHeader(http.StatusEarlyHints)
 			w.Write([]byte("fuck you"))
 			r.Body.Close()
-			fmt.Printf("[INFO] requested ip is not in whitelist %s for %s\n", r.RemoteAddr, r.URL.String())
+			fmt.Printf("[INFO] requested ip is not in whitelist %s for %s\n", ip, r.URL.String())
 			return
 		}
 	}
