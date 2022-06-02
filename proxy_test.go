@@ -790,15 +790,15 @@ func TestSimpleHttpRequest(t *testing.T) {
 	}
 	client := http.Client{Transport: tr}
 
-	resp, err := client.Get("http://google20012312031.de")
-	fmt.Println(resp)
+	resp, err := client.Get("https://2ip.ru")
+	fmt.Println(resp, err)
 	if resp == nil || err != nil {
 		t.Error("Error while requesting random string with http", resp, err)
 	}
 	proxy.OnResponse(goproxy.UrlMatches(regexp.MustCompile(".*"))).DoFunc(returnNil)
 
-	resp, err = client.Get("http://google20012312031.de")
-	fmt.Println(resp)
+	resp, err = client.Get("https://2ip.ru")
+	fmt.Println(resp, err)
 	if resp == nil {
 		t.Error("Error while requesting random string with http", resp)
 	}
@@ -842,4 +842,67 @@ func TestResponseContentLength(t *testing.T) {
 		t.Logf("response Content-Length: %d", resp.ContentLength)
 		t.Fatalf("Wrong response Content-Length.")
 	}
+}
+
+func GetOutboundIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	localAddr := conn.LocalAddr().String()
+	idx := strings.LastIndex(localAddr, ":")
+	return localAddr[0:idx]
+}
+
+func GetClient(address string) (*http.Client, error) {
+	proxyURL, err := url.Parse(address)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{}
+	client.Transport = &http.Transport{
+		Proxy: http.ProxyURL(proxyURL),
+	}
+	client.Timeout = time.Second * 5
+	return client, nil
+}
+
+func TestCustom(t *testing.T) {
+	const defaultPort = 8080
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.Verbose = true
+	proxy.IP = GetOutboundIP()
+	proxy.Auth = &goproxy.Auth{
+		Username: "user",
+		Password: "password",
+	}
+	addr, err := net.ResolveTCPAddr("tcp", proxy.IP+":0")
+	if err != nil {
+		panic(err)
+	}
+	dialer := &net.Dialer{LocalAddr: addr}
+	proxy.Tr.Dial = func(network, addr string) (net.Conn, error) {
+		return dialer.Dial(network, addr)
+	}
+	fmt.Printf("starting proxy on default address %s:%d\n", proxy.IP, defaultPort)
+	var errChan = make(chan error, 0)
+	go func() {
+		errChan <- http.ListenAndServe(fmt.Sprintf("%s:%d", proxy.IP, defaultPort), proxy)
+	}()
+	client, err := GetClient("http://user:passwords@192.168.0.54:8080")
+	if err != nil {
+		panic(err)
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://2ip.ru/", nil)
+	req.Header.Set("User-Agent", "curl/7.37.0")
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(body))
 }

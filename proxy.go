@@ -13,6 +13,11 @@ import (
 	"sync/atomic"
 )
 
+type Auth struct {
+	Username string
+	Password string
+}
+
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
 	// session variable must be aligned in i386
@@ -36,6 +41,7 @@ type ProxyHttpServer struct {
 	IP                     string
 	ForbiddenRemoteHosts   map[string]struct{}
 	WhiteListedRemoteHosts map[string]struct{}
+	Auth                   *Auth
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -114,6 +120,9 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if proxy.AuthProxy(w, r) {
+		return
+	}
 	ip := strings.Split(r.RemoteAddr, ":")[0]
 	if proxy.ForbiddenRemoteHosts != nil {
 		if _, ok := proxy.ForbiddenRemoteHosts[ip]; ok {
